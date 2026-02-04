@@ -6,6 +6,12 @@ from io import BytesIO
 st.set_page_config(page_title="Data Viewer", layout="wide")
 st.title("📊 Data Viewer")
 
+# Khởi tạo session state cho bộ lọc
+if "filter_status" not in st.session_state:
+    st.session_state.filter_status = "Tất cả"
+if "filter_sync" not in st.session_state:
+    st.session_state.filter_sync = "Tất cả"
+
 # Upload files trên cùng 1 hàng
 col_upload1, col_upload2 = st.columns(2)
 
@@ -51,12 +57,45 @@ if file1 is not None:
     else:
         lms["sync_dmn_done"] = False
     
-    # Pivot table thống kê
-    st.subheader("📊 Thống kê theo Status và Sync")
+    # Pivot table thống kê với nút bấm
+    st.subheader("📊 Thống kê theo Status và Sync (bấm vào số để lọc)")
+    
+    # Tạo pivot data
     pivot = pd.pivot_table(lms, index="status", columns="sync_dmn_done", aggfunc="size", fill_value=0)
-    pivot.columns = [f"sync_dmn_done={col}" for col in pivot.columns]
-    pivot["Tổng"] = pivot.sum(axis=1)
-    st.dataframe(pivot, use_container_width=True)
+    status_list = list(pivot.index)
+    sync_cols = list(pivot.columns)
+    
+    # Header row
+    header_cols = st.columns([2] + [1] * len(sync_cols) + [1])
+    header_cols[0].write("**Status**")
+    for i, col in enumerate(sync_cols):
+        header_cols[i + 1].write(f"**sync={col}**")
+    header_cols[-1].write("**Tổng**")
+    
+    # Data rows với buttons
+    for status in status_list:
+        row_cols = st.columns([2] + [1] * len(sync_cols) + [1])
+        row_cols[0].write(status)
+        
+        for i, sync_val in enumerate(sync_cols):
+            count = int(pivot.loc[status, sync_val])
+            if row_cols[i + 1].button(str(count), key=f"btn_{status}_{sync_val}"):
+                st.session_state.filter_status = status
+                st.session_state.filter_sync = sync_val
+                st.rerun()
+        
+        # Tổng cho mỗi status
+        total = int(pivot.loc[status].sum())
+        if row_cols[-1].button(str(total), key=f"btn_{status}_total"):
+            st.session_state.filter_status = status
+            st.session_state.filter_sync = "Tất cả"
+            st.rerun()
+    
+    # Reset button
+    if st.button("🔄 Reset bộ lọc"):
+        st.session_state.filter_status = "Tất cả"
+        st.session_state.filter_sync = "Tất cả"
+        st.rerun()
     
     st.divider()
     
@@ -64,20 +103,25 @@ if file1 is not None:
     st.subheader("🔍 Bộ lọc")
     col_filter1, col_filter2 = st.columns(2)
     
+    status_options = ["Tất cả"] + list(lms["status"].dropna().unique())
+    sync_options = ["Tất cả", True, False]
+    
     with col_filter1:
-        status_options = ["Tất cả"] + list(lms["status"].dropna().unique())
-        selected_status = st.selectbox("Lọc theo Status", status_options)
+        status_index = status_options.index(st.session_state.filter_status) if st.session_state.filter_status in status_options else 0
+        selected_status = st.selectbox("Lọc theo Status", status_options, index=status_index)
+        st.session_state.filter_status = selected_status
     
     with col_filter2:
-        sync_options = ["Tất cả", True, False]
-        selected_sync = st.selectbox("Lọc theo Sync DMN Done", sync_options)
+        sync_index = sync_options.index(st.session_state.filter_sync) if st.session_state.filter_sync in sync_options else 0
+        selected_sync = st.selectbox("Lọc theo Sync DMN Done", sync_options, index=sync_index)
+        st.session_state.filter_sync = selected_sync
     
     # Áp dụng bộ lọc
     lms_filtered = lms.copy()
-    if selected_status != "Tất cả":
-        lms_filtered = lms_filtered[lms_filtered["status"] == selected_status]
-    if selected_sync != "Tất cả":
-        lms_filtered = lms_filtered[lms_filtered["sync_dmn_done"] == selected_sync]
+    if st.session_state.filter_status != "Tất cả":
+        lms_filtered = lms_filtered[lms_filtered["status"] == st.session_state.filter_status]
+    if st.session_state.filter_sync != "Tất cả":
+        lms_filtered = lms_filtered[lms_filtered["sync_dmn_done"] == st.session_state.filter_sync]
     
     # Hiển thị bảng dữ liệu đã lọc
     st.subheader("📗 Dữ liệu LMS (Excel)")
