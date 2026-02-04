@@ -216,7 +216,7 @@ if lms is not None:
         
         if "share_url" in st.session_state:
             st.success(f"✅ Đã tạo link chia sẻ!")
-            st.code(f"http://localhost:8501{st.session_state.share_url}")
+            st.code(f"https://checkcertbvl.streamlit.app/{st.session_state.share_url}")
             st.caption(f"ID: {st.session_state.share_id}")
 else:
     if not shared_id:
