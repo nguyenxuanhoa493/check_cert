@@ -52,7 +52,7 @@ if not loaded_from_share:
     st.divider()
     
     # Header cho LMS
-    lms_headers = ["user_name", "user-code", "org", "code_syllabus", "syllabus", "data", "status", "dms", "request"]
+    lms_headers = ["user_name", "user-code", "org", "code_syllabus", "syllabus", "data", "status", "time", "request"]
     
     # Đọc DMS trước để có thể check sync
     dms = None
