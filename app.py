@@ -52,7 +52,7 @@ if not loaded_from_share:
     st.divider()
     
     # Header cho LMS
-    lms_headers = ["user_name", "user-code", "org", "code_syllabus", "syllabus", "data", "status", "date"]
+    lms_headers = ["user_name", "user-code", "org", "code_syllabus", "syllabus", "data", "status", "dms", "request"]
     
     # Đọc DMS trước để có thể check sync
     dms = None
@@ -63,18 +63,16 @@ if not loaded_from_share:
     if file1 is not None:
         lms = pd.read_excel(file1, skiprows=5, header=None, names=lms_headers)
         
-        # Parse cột data từ JSON và flatten
-        def parse_json(x):
+        # Parse cột data từ JSON và lấy CERTIFICATENUMBER
+        def get_cert_number(x):
             try:
-                return json.loads(x) if pd.notna(x) and x else {}
+                data = json.loads(x) if pd.notna(x) and x else {}
+                return data.get("CERTIFICATENUMBER", "")
             except:
-                return {}
+                return ""
         
-        data_parsed = lms["data"].apply(parse_json)
-        data_flat = pd.json_normalize(data_parsed)
-        
-        # Xóa cột data cũ và nối các cột mới
-        lms = pd.concat([lms.drop(columns=["data"]), data_flat], axis=1)
+        lms["CERTIFICATENUMBER"] = lms["data"].apply(get_cert_number)
+        lms = lms.drop(columns=["data"])
         
         # Thêm cột sync_dmn_done: True nếu CERTIFICATENUMBER tồn tại trong DMS
         if dms is not None and "CERTIFICATENUMBER" in lms.columns and "CERTIFICATENUMBER" in dms.columns:
