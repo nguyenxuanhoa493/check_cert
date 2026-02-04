@@ -72,7 +72,7 @@ if not loaded_from_share:
                 return ""
         
         lms["CERTIFICATENUMBER"] = lms["data"].apply(get_cert_number)
-        lms = lms.drop(columns=["data"])
+        # lms = lms.drop(columns=["data"])
         
         # Thêm cột sync_dmn_done: True nếu CERTIFICATENUMBER tồn tại trong DMS
         if dms is not None and "CERTIFICATENUMBER" in lms.columns and "CERTIFICATENUMBER" in dms.columns:
