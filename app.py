@@ -56,28 +56,41 @@ if not loaded_from_share:
     
     # Đọc DMS trước để có thể check sync
     dms = None
+    dms_map_id_set = set()
     if file2 is not None:
         dms = pd.read_csv(file2)
+        # Tạo MAP_ID cho DMS = PRODUCERID_CERTIFICATE
+        if "PRODUCERID" in dms.columns and "CERTIFICATE" in dms.columns:
+            dms["MAP_ID"] = dms["PRODUCERID"].astype(str) + "_" + dms["CERTIFICATE"].astype(str)
+            dms_map_id_set = set(dms["MAP_ID"].dropna().astype(str))
     
     # Đọc và hiển thị dữ liệu
     if file1 is not None:
         lms = pd.read_excel(file1, skiprows=5, header=None, names=lms_headers)
         
-        # Parse cột data từ JSON và lấy CERTIFICATENUMBER
-        def get_cert_number(x):
+        # Parse cột data từ JSON và lấy CERTIFICATENUMBER, PRODUCERID, CERTIFICATE
+        def parse_data_fields(x):
             try:
                 data = json.loads(x) if pd.notna(x) and x else {}
-                return data.get("CERTIFICATENUMBER", "")
+                return {
+                    "CERTIFICATENUMBER": data.get("CERTIFICATENUMBER", ""),
+                    "PRODUCERID": data.get("PRODUCERID", ""),
+                    "CERTIFICATE": data.get("CERTIFICATE", "")
+                }
             except:
-                return ""
+                return {"CERTIFICATENUMBER": "", "PRODUCERID": "", "CERTIFICATE": ""}
         
-        lms["CERTIFICATENUMBER"] = lms["data"].apply(get_cert_number)
-        # lms = lms.drop(columns=["data"])
+        parsed = lms["data"].apply(parse_data_fields).apply(pd.Series)
+        lms["CERTIFICATENUMBER"] = parsed["CERTIFICATENUMBER"]
+        lms["PRODUCERID"] = parsed["PRODUCERID"]
+        lms["CERTIFICATE"] = parsed["CERTIFICATE"]
         
-        # Thêm cột sync_dmn_done: True nếu CERTIFICATENUMBER tồn tại trong DMS
-        if dms is not None and "CERTIFICATENUMBER" in lms.columns and "CERTIFICATENUMBER" in dms.columns:
-            dms_cert_set = set(dms["CERTIFICATENUMBER"].dropna().astype(str))
-            lms["sync_dmn_done"] = lms["CERTIFICATENUMBER"].astype(str).isin(dms_cert_set)
+        # Tạo MAP_ID cho LMS = PRODUCERID_CERTIFICATE
+        lms["MAP_ID"] = lms["PRODUCERID"].astype(str) + "_" + lms["CERTIFICATE"].astype(str)
+        
+        # Thêm cột sync_dmn_done: True nếu MAP_ID tồn tại trong DMS
+        if dms is not None and len(dms_map_id_set) > 0:
+            lms["sync_dmn_done"] = lms["MAP_ID"].astype(str).isin(dms_map_id_set)
         else:
             lms["sync_dmn_done"] = False
 
