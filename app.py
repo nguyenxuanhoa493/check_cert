@@ -42,13 +42,26 @@ def load_gist(gist_id: str) -> dict:
     if GITHUB_TOKEN:
         headers["Authorization"] = f"token {GITHUB_TOKEN}"
     
-    response = requests.get(f"https://api.github.com/gists/{gist_id}", headers=headers)
-    
-    if response.status_code == 200:
-        gist = response.json()
-        if "lms_data.json" in gist["files"]:
-            content = gist["files"]["lms_data.json"]["content"]
-            return json.loads(content)
+    try:
+        response = requests.get(f"https://api.github.com/gists/{gist_id}", headers=headers)
+        
+        if response.status_code == 200:
+            gist = response.json()
+            if "lms_data.json" in gist["files"]:
+                file_info = gist["files"]["lms_data.json"]
+                
+                # Nếu file lớn, content bị truncated, cần fetch từ raw_url
+                if file_info.get("truncated", False) or file_info.get("content") is None:
+                    raw_url = file_info.get("raw_url")
+                    if raw_url:
+                        raw_response = requests.get(raw_url, headers=headers)
+                        if raw_response.status_code == 200:
+                            return json.loads(raw_response.text)
+                else:
+                    content = file_info["content"]
+                    return json.loads(content)
+    except Exception as e:
+        st.error(f"Lỗi khi load Gist: {str(e)}")
     return None
 
 # Khởi tạo session state cho bộ lọc
