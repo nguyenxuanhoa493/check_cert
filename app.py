@@ -1,16 +1,55 @@
 import streamlit as st
 import pandas as pd
 import json
-import os
-import uuid
+import requests
 from io import BytesIO
 
 st.set_page_config(page_title="Data Viewer", layout="wide")
 st.title("📊 Data Viewer")
 
-# Thư mục lưu shared data
-SHARED_DATA_DIR = "shared_data"
-os.makedirs(SHARED_DATA_DIR, exist_ok=True)
+# GitHub Gist API
+GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", None) if hasattr(st, 'secrets') else None
+
+def create_gist(data_json: str, description: str = "LMS Data Share") -> str:
+    """Tạo GitHub Gist và trả về Gist ID"""
+    if not GITHUB_TOKEN:
+        return None
+    
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    payload = {
+        "description": description,
+        "public": False,
+        "files": {
+            "lms_data.json": {
+                "content": data_json
+            }
+        }
+    }
+    
+    response = requests.post("https://api.github.com/gists", headers=headers, json=payload)
+    
+    if response.status_code == 201:
+        return response.json()["id"]
+    return None
+
+def load_gist(gist_id: str) -> dict:
+    """Load data từ GitHub Gist"""
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"token {GITHUB_TOKEN}"
+    
+    response = requests.get(f"https://api.github.com/gists/{gist_id}", headers=headers)
+    
+    if response.status_code == 200:
+        gist = response.json()
+        if "lms_data.json" in gist["files"]:
+            content = gist["files"]["lms_data.json"]["content"]
+            return json.loads(content)
+    return None
 
 # Khởi tạo session state cho bộ lọc
 if "filter_status" not in st.session_state:
@@ -18,7 +57,7 @@ if "filter_status" not in st.session_state:
 if "filter_sync" not in st.session_state:
     st.session_state.filter_sync = "Tất cả"
 
-# Kiểm tra query param để load shared data
+# Kiểm tra query param để load shared data từ Gist
 query_params = st.query_params
 shared_id = query_params.get("share", None)
 
@@ -26,14 +65,12 @@ lms = None
 loaded_from_share = False
 
 if shared_id:
-    # Load từ shared data
-    shared_file = os.path.join(SHARED_DATA_DIR, f"{shared_id}.json")
-    if os.path.exists(shared_file):
-        with open(shared_file, "r", encoding="utf-8") as f:
-            shared_data = json.load(f)
+    # Load từ GitHub Gist
+    shared_data = load_gist(shared_id)
+    if shared_data:
         lms = pd.DataFrame(shared_data)
         loaded_from_share = True
-        st.success(f"✅ Đã load dữ liệu từ link chia sẻ (ID: {shared_id})")
+        st.success(f"✅ Đã load dữ liệu từ link chia sẻ (Gist ID: {shared_id})")
     else:
         st.error("❌ Link chia sẻ không hợp lệ hoặc đã hết hạn")
 
@@ -212,23 +249,24 @@ if lms is not None:
         )
     
     with col_btn3:
-        if st.button("🔗 Tạo link chia sẻ"):
-            # Tạo unique ID
-            share_id = str(uuid.uuid4())[:8]
-            shared_file = os.path.join(SHARED_DATA_DIR, f"{share_id}.json")
+        if GITHUB_TOKEN:
+            if st.button("🔗 Tạo link chia sẻ"):
+                # Tạo Gist
+                data_json = lms.to_json(orient="records", force_ascii=False)
+                gist_id = create_gist(data_json)
+                
+                if gist_id:
+                    share_url = f"?share={gist_id}"
+                    st.session_state.share_url = share_url
+                    st.session_state.share_id = gist_id
+                else:
+                    st.error("❌ Không thể tạo link chia sẻ. Kiểm tra GitHub Token.")
             
-            # Lưu data ra file JSON
-            lms.to_json(shared_file, orient="records", force_ascii=False, indent=2)
-            
-            # Tạo link chia sẻ
-            share_url = f"?share={share_id}"
-            st.session_state.share_url = share_url
-            st.session_state.share_id = share_id
-        
-        if "share_url" in st.session_state:
-            st.success(f"✅ Đã tạo link chia sẻ!")
-            st.code(f"https://checkcertbvl.streamlit.app/{st.session_state.share_url}")
-            st.caption(f"ID: {st.session_state.share_id}")
-else:
-    if not shared_id:
-        st.warning("Chưa upload file Excel")
+            if "share_url" in st.session_state:
+                st.success(f"✅ Đã tạo link chia sẻ!")
+                st.code(f"https://checkcertbvl.streamlit.app/{st.session_state.share_url}")
+                st.caption(f"Gist ID: {st.session_state.share_id}")
+        else:
+            st.warning("⚠️ Chưa cấu hình GITHUB_TOKEN trong secrets")
+elif not shared_id:
+    st.warning("Chưa upload file Excel")
